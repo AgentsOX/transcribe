@@ -9,7 +9,7 @@ Extras:
   --denoise        heavy neural denoise via DeepFilterNet (needs `denoise` extra)
   --ab             A/B test raw vs enhanced and report which is better
   --reference FILE compute real WER vs a human transcript (definitive)
-  --speakers       who-said-what diarization (needs `speakers` extra + HF_TOKEN)
+  --speakers       who-said-what diarization (needs `speakers` extra; local, no token)
 """
 
 from __future__ import annotations
@@ -17,7 +17,6 @@ from __future__ import annotations
 import argparse
 import difflib
 import json
-import os
 import sys
 import tempfile
 import warnings
@@ -29,6 +28,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from . import audio
+from . import diarize
 from . import metrics as M
 from . import report_html
 
@@ -84,22 +84,8 @@ def plain_text(segs: list[Segment]) -> str:
     return " ".join(s.text for s in segs).strip()
 
 
-# ── diarization (optional) ───────────────────────────────────────────────────
-def add_speakers(wav: Path, segments: list[Segment], hf_token: str) -> None:
-    from pyannote.audio import Pipeline
-
-    pipeline = Pipeline.from_pretrained(
-        "pyannote/speaker-diarization-3.1", use_auth_token=hf_token)
-    diar = pipeline(str(wav))
-    turns = [(t.start, t.end, spk)
-             for t, _, spk in diar.itertracks(yield_label=True)]
-    for seg in segments:
-        best, best_ov = None, 0.0
-        for ts, te, spk in turns:
-            ov = min(seg.end, te) - max(seg.start, ts)
-            if ov > best_ov:
-                best, best_ov = spk, ov
-        seg.speaker = best or "SPEAKER_00"
+# Speaker diarization lives in diarize.py (classic embeddings + clustering,
+# token-free, fully local).
 
 
 # ── writers ──────────────────────────────────────────────────────────────────
@@ -291,16 +277,6 @@ def run(args: argparse.Namespace) -> int:
     language = None if args.lang == "auto" else args.lang
     out_dir = Path(args.output_dir).expanduser() if args.output_dir else None
 
-    token = None
-    if args.speakers:
-        token = args.hf_token or os.environ.get("HF_TOKEN")
-        if not token:
-            print("✗ --speakers needs a HuggingFace token. Set HF_TOKEN or pass "
-                  "--hf-token.\n  Accept terms once at "
-                  "https://huggingface.co/pyannote/speaker-diarization-3.1",
-                  file=sys.stderr)
-            return 2
-
     files = gather_inputs(args.input)
     if not files:
         print("✗ no audio files to process.", file=sys.stderr)
@@ -329,7 +305,9 @@ def run(args: argparse.Namespace) -> int:
             print(f"  · detected language: {lang}  ({len(segs)} segments)")
             if args.speakers:
                 print("  · diarizing (speaker labels)…")
-                add_speakers(wav, segs, token)
+                n = diarize.assign_speakers(
+                    wav, segs, num_speakers=args.num_speakers)
+                print(f"  · found {n} speaker(s)")
             write_outputs(segs, dest, src.stem, formats, lang, model_repo,
                           args.speakers)
 
@@ -349,7 +327,7 @@ def main(argv: list[str] | None = None) -> int:
                "  transcribe call.m4a --ab                 # raw vs enhanced\n"
                "  transcribe call.m4a --ab --reference truth.txt   # real WER\n"
                "  transcribe ./recordings --format all --model large-v3\n"
-               "  transcribe call.m4a --speakers           # needs HF_TOKEN\n",
+               "  transcribe call.m4a --speakers --num-speakers 2   # local, no token\n",
     )
     p.add_argument("input", nargs="+", help="audio/video file(s) or a folder")
     p.add_argument("--lang", default="auto", choices=["auto", "he", "en"],
@@ -370,14 +348,16 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--reference", default=None,
                    help="human transcript (.txt) → compute real WER in --ab mode")
     p.add_argument("--speakers", action="store_true",
-                   help="label who-said-what (needs `speakers` extra + HF_TOKEN)")
+                   help="label who-said-what (needs `speakers` extra; local, "
+                        "no token)")
+    p.add_argument("--num-speakers", type=int, default=0,
+                   help="force the speaker count (0 = auto-detect); set it when "
+                        "you know it, e.g. 2 for a call")
     p.add_argument("--output-dir", default=None,
                    help="where to write outputs (default: next to each input)")
     p.add_argument("--compute-type", default="int8",
                    choices=["int8", "int8_float32", "float32"],
                    help="CTranslate2 compute type (default: int8)")
-    p.add_argument("--hf-token", default=None,
-                   help="HuggingFace token for diarization (or set HF_TOKEN)")
     args = p.parse_args(argv)
 
     try:

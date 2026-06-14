@@ -12,14 +12,16 @@ dependencies = [
 
 # Optional extras — install only what you need.
 [project.optional-dependencies]
-# Speaker labels (diarization) — pulls in PyTorch + pyannote.
+# Speaker labels (diarization) — classic, token-free, fully local.
+# Per-segment ECAPA voice embeddings (SpeechBrain, public model — no HF login,
+# no gated terms) + agglomerative clustering. Model fetched once, then offline.
 #   uv sync --extra speakers
 speakers = [
-    "pyannote.audio>=3.3.0",
-    # Pin to the torch line pyannote 3.4 targets. torchaudio >=2.8 dropped
-    # AudioMetaData / list_audio_backends, which pyannote's io.py still uses.
-    "torch==2.2.2",
-    "torchaudio==2.2.2",
+    "speechbrain>=1.0",
+    "scikit-learn>=1.3",
+    # speechbrain 1.x uses torch.amp.custom_fwd (added in torch 2.4).
+    "torch>=2.4",
+    "torchaudio>=2.4",
 ]
 # Heavy neural denoise for --denoise (DeepFilterNet CLI).
 #   uv sync --extra denoise
