@@ -280,6 +280,13 @@ def gather_inputs(paths: list[str]) -> list[Path]:
 
 
 def run(args: argparse.Namespace) -> int:
+    import shutil
+    if shutil.which("ffmpeg") is None:
+        print("✗ ffmpeg not found — it's required to read audio.\n"
+              "  macOS:  brew install ffmpeg\n"
+              "  Linux:  sudo apt install ffmpeg", file=sys.stderr)
+        return 3
+
     model_repo = MODELS.get(args.model, args.model)
     formats = ["txt", "srt", "vtt", "json"] if "all" in args.format else args.format
     language = None if args.lang == "auto" else args.lang
