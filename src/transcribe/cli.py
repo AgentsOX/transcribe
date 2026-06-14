@@ -17,10 +17,18 @@ from __future__ import annotations
 import argparse
 import difflib
 import json
+import logging
+import os
 import sys
 import tempfile
 import warnings
 
+# Keep first-run output clean. The HF Hub logs "you are sending unauthenticated
+# requests… set a HF_TOKEN" while downloading public models — which wrongly
+# implies a token is needed. It isn't: everything here uses public models.
+os.environ.setdefault("HF_HUB_DISABLE_TELEMETRY", "1")
+for _noisy in ("huggingface_hub", "speechbrain", "pyannote"):
+    logging.getLogger(_noisy).setLevel(logging.ERROR)
 # Benign NumPy NaN/overflow chatter from Whisper's mel feature extraction.
 warnings.filterwarnings("ignore", category=RuntimeWarning,
                         message=".*encountered in matmul.*")
@@ -307,7 +315,11 @@ def run(args: argparse.Namespace) -> int:
                 print("  · diarizing (speaker labels)…")
                 n = diarize.assign_speakers(
                     wav, segs, num_speakers=args.num_speakers)
-                print(f"  · found {n} speaker(s)")
+                if args.num_speakers:
+                    print(f"  · labeled {n} speaker(s)")
+                else:
+                    print(f"  · auto-detected {n} speaker(s) — if that's off, "
+                          f"re-run with --num-speakers N")
             write_outputs(segs, dest, src.stem, formats, lang, model_repo,
                           args.speakers)
 

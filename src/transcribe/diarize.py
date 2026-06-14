@@ -51,8 +51,15 @@ def _embed(encoder, clip: np.ndarray) -> np.ndarray:
     return emb                                          # 192-d
 
 
+# Cosine-distance cut for auto-detect. Calibrated on ECAPA embeddings: same
+# speaker clusters well below this, distinct speakers above. ~0.9 keeps a typical
+# 2-person call as 2 (lower values over-split). Auto is a best guess — pass
+# --num-speakers when you know the count.
+DEFAULT_THRESHOLD = 0.9
+
+
 def assign_speakers(wav_path: Path, segments, *, num_speakers: int = 0,
-                    threshold: float = 0.55) -> int:
+                    threshold: float = DEFAULT_THRESHOLD) -> int:
     """Tag each segment with SPEAKER_xx (in place). Returns #speakers found.
 
     num_speakers > 0 forces that many speakers (most reliable when you know it);
