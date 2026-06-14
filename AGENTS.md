@@ -23,6 +23,16 @@ locally** — recordings never leave the machine.
 
 ## Setup
 
+**Global CLI** (use `transcribe` in any repo — the official install):
+
+```bash
+uv tool install "git+https://github.com/AgentsOX/transcribe.git"            # base
+uv tool install "transcribe[speakers] @ git+https://github.com/AgentsOX/transcribe.git"  # + speakers
+uv tool upgrade transcribe   # update later
+```
+
+**From source** (development in this folder):
+
 ```bash
 cd apps/transcribe
 uv sync                     # base: transcription + txt/srt/vtt/json + --enhance + --ab
